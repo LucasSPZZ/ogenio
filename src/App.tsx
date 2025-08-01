@@ -1,81 +1,180 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { EmpreendimentoCard } from './components/EmpreendimentoCard';
 import { Modal } from './components/Modal';
 import { ConfigModal } from './components/ConfigModal';
 import { Spinner } from './components/Spinner';
+import * as googleDrive from './services/googleDrive';
 import type { Empreendimento, ManagedFile } from './types';
+import { LogIn, AlertCircle } from 'lucide-react';
 
 function App() {
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [empreendimentoSelecionado, setEmpreendimentoSelecionado] = useState<Empreendimento | null>(null);
   const [isCreating, setIsCreating] = useState(false);
-  const [novoEmpreendimento, setNovoEmpreendimento] = useState({
-    nome: '',
-    descricao: ''
-  });
+  const [novoEmpreendimento, setNovoEmpreendimento] = useState({ nome: '', descricao: '' });
+  
+  const [isGapiReady, setIsGapiReady] = useState(false);
+  const [isSignedIn, setIsSignedIn] = useState(false);
+  const [authError, setAuthError] = useState<string | null>(null);
+  const [isDemoMode, setIsDemoMode] = useState(false);
 
-  const handleCriarEmpreendimento = () => {
+  useEffect(() => {
+    googleDrive.initClient((signedIn) => {
+      setIsSignedIn(signedIn);
+      setIsGapiReady(true);
+      
+      // Verifica se está em modo demo
+      const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
+      const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
+      const demoMode = !API_KEY || API_KEY === 'SUA_CHAVE_DE_API_DO_GOOGLE' || 
+                      !CLIENT_ID || CLIENT_ID === 'SEU_ID_DE_CLIENTE_OAUTH_DO_GOOGLE';
+      
+      setIsDemoMode(demoMode);
+      
+      if(!signedIn && !demoMode){
+         setAuthError("Falha na autenticação. Verifique seu Client ID e se o domínio está autorizado no Google Cloud Console.");
+      } else {
+        setAuthError(null);
+      }
+    });
+  }, []);
+
+  const handleCriarEmpreendimento = async () => {
     if (!novoEmpreendimento.nome.trim() || isCreating) return;
     setIsCreating(true);
 
-    // Simula uma chamada de API
-    setTimeout(() => {
+    try {
+      const folderId = await googleDrive.createFolder(novoEmpreendimento.nome);
       const novo: Empreendimento = {
         id: Date.now().toString(),
         nome: novoEmpreendimento.nome,
         descricao: novoEmpreendimento.descricao,
+        driveFolderId: folderId,
         arquivos: [],
         criadoEm: new Date(),
       };
       setEmpreendimentos(prev => [...prev, novo]);
       setNovoEmpreendimento({ nome: '', descricao: '' });
       setIsNewModalOpen(false);
+    } catch (error) {
+      console.error("Erro ao criar pasta no Drive:", error);
+      alert("Não foi possível criar o empreendimento. Verifique o console para mais detalhes.");
+    } finally {
       setIsCreating(false);
-    }, 1000);
+    }
   };
 
   const updateEmpreendimentoArquivos = (id: string, updateFn: (arquivos: ManagedFile[]) => ManagedFile[]) => {
     setEmpreendimentos(prev =>
-      prev.map(emp => emp.id === id ? { ...emp, arquivos: updateFn(emp.arquivos) } : emp)
+      prev.map(emp => (emp.id === id ? { ...emp, arquivos: updateFn(emp.arquivos) } : emp))
     );
     if (empreendimentoSelecionado?.id === id) {
-      setEmpreendimentoSelecionado(prev => prev ? { ...prev, arquivos: updateFn(prev.arquivos) } : null);
+      setEmpreendimentoSelecionado(prev => (prev ? { ...prev, arquivos: updateFn(prev.arquivos) } : null));
     }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, empreendimentoId: string) => {
+    const targetEmpreendimento = empreendimentos.find(e => e.id === empreendimentoId);
+    if (!targetEmpreendimento || !targetEmpreendimento.driveFolderId) return;
+
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
     const newManagedFiles: ManagedFile[] = files.map(file => ({ file, status: 'uploading' }));
     updateEmpreendimentoArquivos(empreendimentoId, arquivos => [...arquivos, ...newManagedFiles]);
     
-    // Simula o tempo de upload para cada arquivo
-    newManagedFiles.forEach((managedFile, index) => {
-      setTimeout(() => {
+    newManagedFiles.forEach(async (managedFile) => {
+      try {
+        const driveId = await googleDrive.uploadFile(targetEmpreendimento.driveFolderId!, managedFile.file);
         updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
-          arquivos.map(f => f === managedFile ? { ...f, status: 'completed' } : f)
+          arquivos.map(f => f === managedFile ? { ...f, status: 'completed', driveId } : f)
         );
-      }, 1500 + (index * 200));
+      } catch (error: any) {
+        console.error("Erro ao fazer upload para o Drive:", error);
+        updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
+          arquivos.map(f => f === managedFile ? { ...f, status: 'error', error: error.message || 'Falha no upload' } : f)
+        );
+      }
     });
   };
   
-  const handleDeleteFile = (empreendimentoId: string, fileIndex: number) => {
-    updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, idx) => idx !== fileIndex));
+  const handleDeleteFile = async (empreendimentoId: string, fileIndex: number) => {
+    const targetEmpreendimento = empreendimentos.find(e => e.id === empreendimentoId);
+    const fileToDelete = targetEmpreendimento?.arquivos[fileIndex];
+    if (!fileToDelete?.driveId) return;
+
+    try {
+      await googleDrive.deleteFile(fileToDelete.driveId);
+      updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, idx) => idx !== fileIndex));
+    } catch (error) {
+      console.error("Erro ao deletar arquivo do Drive:", error);
+      alert("Falha ao deletar o arquivo.");
+    }
   };
 
   const handleSaveEmpreendimento = (id: string, data: { nome: string; descricao: string }) => {
     setEmpreendimentos(prev =>
-      prev.map(emp => emp.id === id ? { ...emp, ...data } : emp)
+      prev.map(emp => (emp.id === id ? { ...emp, ...data } : emp))
     );
   };
+  
+  if (!isGapiReady) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-slate-50">
+        <Spinner className="w-10 h-10 text-brand-start" />
+      </div>
+    );
+  }
+
+  if (!isSignedIn) {
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100 p-4">
+        <EmptyState onNewEmpreendimento={() => {}} />
+        <div className="mt-8">
+          {isDemoMode ? (
+            <div className="text-center">
+              <div className="flex items-center justify-center gap-2 mb-4 p-4 bg-yellow-50 border border-yellow-200 rounded-lg">
+                <AlertCircle className="w-5 h-5 text-yellow-600" />
+                <span className="text-yellow-800 font-medium">Modo de Demonstração</span>
+              </div>
+              <p className="text-sm text-slate-600 mb-4 max-w-sm">
+                Para usar o Google Drive, configure suas credenciais no arquivo <code className="bg-slate-100 px-1 rounded">.env.development</code>
+              </p>
+              <button 
+                onClick={() => setIsSignedIn(true)} 
+                className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform"
+              >
+                <LogIn size={20} /> Entrar em Modo Demo
+              </button>
+            </div>
+          ) : (
+            <>
+              <button onClick={googleDrive.signIn} className="flex items-center gap-3 px-6 py-3 bg-white text-slate-700 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform">
+                <LogIn size={20} /> Login com Google Drive
+              </button>
+              {authError && <p className="mt-4 text-sm text-red-600 max-w-sm text-center">{authError}</p>}
+            </>
+          )}
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100">
-      <Header onNewEmpreendimento={() => setIsNewModalOpen(true)} />
+      <Header onNewEmpreendimento={() => setIsNewModalOpen(true)} onSignOut={googleDrive.signOut} />
+
+      {isDemoMode && (
+        <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2">
+          <div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-yellow-800 text-sm">
+            <AlertCircle className="w-4 h-4" />
+            <span>Modo de Demonstração - Dados são simulados</span>
+          </div>
+        </div>
+      )}
 
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {empreendimentos.length === 0 ? (
@@ -95,26 +194,17 @@ function App() {
         )}
       </main>
 
-      {/* Modal para Novo Empreendimento */}
-      <Modal
-        isOpen={isNewModalOpen}
-        onClose={() => setIsNewModalOpen(false)}
-        title="Novo Empreendimento"
+      <Modal isOpen={isNewModalOpen} onClose={() => setIsNewModalOpen(false)} title="Novo Empreendimento"
         footer={
           <>
             <button onClick={() => setIsNewModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-sm hover:bg-slate-50">
               Cancelar
             </button>
-            <button 
-              onClick={handleCriarEmpreendimento} 
-              disabled={!novoEmpreendimento.nome.trim() || isCreating} 
-              className="w-48 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
-            >
+            <button onClick={handleCriarEmpreendimento} disabled={!novoEmpreendimento.nome.trim() || isCreating} className="w-48 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
               {isCreating ? <Spinner /> : 'Criar Empreendimento'}
             </button>
           </>
-        }
-      >
+        }>
         <div className="space-y-6">
           <div>
             <label htmlFor="nome" className="block text-sm font-medium text-slate-700 mb-1">Nome do Empreendimento</label>
@@ -127,7 +217,6 @@ function App() {
         </div>
       </Modal>
 
-      {/* Modal de Configurações */}
       {empreendimentoSelecionado && (
         <ConfigModal
           empreendimento={empreendimentoSelecionado}

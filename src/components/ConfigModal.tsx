@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileText, Settings, Trash2, UploadCloud, CheckCircle2 } from 'lucide-react';
+import { FileText, Settings, Trash2, UploadCloud, CheckCircle2, AlertTriangle } from 'lucide-react';
 import { Modal } from './Modal';
 import { Spinner } from './Spinner';
 import type { Empreendimento, ManagedFile } from '../types';
@@ -33,25 +33,33 @@ export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onD
     onClose();
   };
   
-  const renderFileItem = (managedFile: ManagedFile, index: number) => (
-    <div key={index} className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-      {managedFile.status === 'uploading' ? (
-        <Spinner className="h-6 w-6 text-slate-400" />
-      ) : (
-        <FileText className="h-6 w-6 text-brand-start flex-shrink-0" />
-      )}
-      <div className="flex-grow">
-        <p className="text-sm font-medium text-slate-700 truncate">{managedFile.file.name}</p>
-        <div className="flex items-center gap-2 text-xs text-slate-500">
-          <span>{formatFileSize(managedFile.file.size)}</span>
-          {managedFile.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+  const renderFileItem = (managedFile: ManagedFile, index: number) => {
+    let icon;
+    if (managedFile.status === 'uploading') {
+      icon = <Spinner className="h-6 w-6 text-slate-400" />;
+    } else if (managedFile.status === 'completed') {
+      icon = <FileText className="h-6 w-6 text-brand-start flex-shrink-0" />;
+    } else { // error
+      icon = <AlertTriangle className="h-6 w-6 text-red-500 flex-shrink-0" />;
+    }
+
+    return (
+      <div key={index} className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+        {icon}
+        <div className="flex-grow">
+          <p className="text-sm font-medium text-slate-700 truncate">{managedFile.file.name}</p>
+          <div className="flex items-center gap-2 text-xs text-slate-500">
+            <span>{formatFileSize(managedFile.file.size)}</span>
+            {managedFile.status === 'completed' && <CheckCircle2 className="w-3 h-3 text-green-500" />}
+            {managedFile.status === 'error' && <span className="text-red-600 truncate">{managedFile.error}</span>}
+          </div>
         </div>
+        <button onClick={() => onDeleteFile(empreendimento.id, index)} className="text-slate-400 hover:text-red-500 transition-colors">
+          <Trash2 size={18} />
+        </button>
       </div>
-      <button onClick={() => onDeleteFile(empreendimento.id, index)} className="text-slate-400 hover:text-red-500 transition-colors">
-        <Trash2 size={18} />
-      </button>
-    </div>
-  );
+    );
+  };
 
   return (
     <Modal
