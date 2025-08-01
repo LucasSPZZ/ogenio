@@ -1,0 +1,20 @@
+RewriteEngine On
+
+# Define a base para a reescrita de URL.
+# Configurado para funcionar na raiz do domínio
+RewriteBase /
+
+# 1. Ignora a reescrita para arquivos reais na pasta de assets.
+#    O ^ no início ancora a busca no diretório definido pelo RewriteBase.
+RewriteRule ^assets/ - [L]
+
+# 2. Ignora a reescrita para outros arquivos conhecidos na raiz (sw.js, manifest.json, etc.)
+RewriteRule ^(sw\.js|manifest\.json|icon-192\.png|icon-512\.png|vite\.svg)$ - [L]
+
+# 3. Se a requisição não for para um arquivo físico existente...
+RewriteCond %{REQUEST_FILENAME} !-f
+# 4. E não for para um diretório físico existente...
+RewriteCond %{REQUEST_FILENAME} !-d
+# 5. ...então, sirva o index.html principal.
+#    A regra captura qualquer coisa (.) e a envia para index.html.
+RewriteRule . index.html [L]
