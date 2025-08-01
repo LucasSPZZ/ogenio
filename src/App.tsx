@@ -1,252 +1,169 @@
-import React, { useState } from 'react';
-import './App.css';
+import { useState } from 'react';
+import { Header } from './components/Header';
+import { EmptyState } from './components/EmptyState';
+import { EmpreendimentoCard } from './components/EmpreendimentoCard';
+import { Modal } from './components/Modal';
+import { FileText, Trash2, UploadCloud } from 'lucide-react';
+import type { Empreendimento } from './types';
 
-interface Empreendimento {
-  id: string;
-  nome: string;
-  descricao: string;
-  arquivos: File[];
-  criadoEm: Date;
+function formatFileSize(bytes: number) {
+  if (bytes === 0) return '0 Bytes';
+  const k = 1024;
+  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
 function App() {
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
-  const [modalAberto, setModalAberto] = useState(false);
+  const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [empreendimentoSelecionado, setEmpreendimentoSelecionado] = useState<Empreendimento | null>(null);
   const [novoEmpreendimento, setNovoEmpreendimento] = useState({
     nome: '',
     descricao: ''
   });
 
-  const criarEmpreendimento = () => {
+  const handleCriarEmpreendimento = () => {
     if (novoEmpreendimento.nome.trim()) {
       const novo: Empreendimento = {
         id: Date.now().toString(),
         nome: novoEmpreendimento.nome,
         descricao: novoEmpreendimento.descricao,
         arquivos: [],
-        criadoEm: new Date()
+        criadoEm: new Date(),
       };
       setEmpreendimentos([...empreendimentos, novo]);
       setNovoEmpreendimento({ nome: '', descricao: '' });
-      setModalAberto(false);
+      setIsNewModalOpen(false);
     }
   };
 
   const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, empreendimentoId: string) => {
     const files = Array.from(event.target.files || []);
-    setEmpreendimentos(prev => 
-      prev.map(emp => 
-        emp.id === empreendimentoId 
-          ? { ...emp, arquivos: [...emp.arquivos, ...files] }
+    if (files.length === 0) return;
+
+    const updateEmpreendimentos = (empId: string, newFiles: File[]) => {
+      setEmpreendimentos(prev =>
+        prev.map(emp =>
+          emp.id === empId ? { ...emp, arquivos: [...emp.arquivos, ...newFiles] } : emp
+        )
+      );
+    };
+
+    updateEmpreendimentos(empreendimentoId, files);
+
+    if (empreendimentoSelecionado?.id === empreendimentoId) {
+      setEmpreendimentoSelecionado(prev => prev ? { ...prev, arquivos: [...prev.arquivos, ...files] } : null);
+    }
+  };
+  
+  const handleDeleteFile = (empreendimentoId: string, fileIndex: number) => {
+    const updateFunction = (prev: Empreendimento[]) =>
+      prev.map(emp =>
+        emp.id === empreendimentoId
+          ? { ...emp, arquivos: emp.arquivos.filter((_, idx) => idx !== fileIndex) }
           : emp
-      )
-    );
+      );
+    setEmpreendimentos(updateFunction);
+
+    if (empreendimentoSelecionado?.id === empreendimentoId) {
+      setEmpreendimentoSelecionado(prev =>
+        prev ? { ...prev, arquivos: prev.arquivos.filter((_, idx) => idx !== fileIndex) } : null
+      );
+    }
   };
 
-  const GenieIcon = () => (
-    <div className="genie-icon">
-      <div className="lamp">
-        <div className="lamp-top"></div>
-        <div className="lamp-body"></div>
-        <div className="smoke">✨</div>
-      </div>
-    </div>
-  );
-
   return (
-    <div className="app">
-      {/* Header */}
-      <header className="header">
-        <div className="header-content">
-          <div className="logo">
-            <GenieIcon />
-            <h1>Genio</h1>
-          </div>
-          <button 
-            className="btn-primary"
-            onClick={() => setModalAberto(true)}
-          >
-            <span className="plus-icon">+</span>
-            Novo Empreendimento
-          </button>
-        </div>
-      </header>
+    <div className="min-h-screen bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100">
+      <Header onNewEmpreendimento={() => setIsNewModalOpen(true)} />
 
-      {/* Main Content */}
-      <main className="main-content">
+      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
         {empreendimentos.length === 0 ? (
-          <div className="empty-state">
-            <GenieIcon />
-            <h2>Bem-vindo ao Genio</h2>
-            <p>Crie seu primeiro empreendimento para começar</p>
-            <button 
-              className="btn-secondary"
-              onClick={() => setModalAberto(true)}
-            >
-              Criar Empreendimento
-            </button>
-          </div>
+          <EmptyState onNewEmpreendimento={() => setIsNewModalOpen(true)} />
         ) : (
-          <div className="empreendimentos-grid">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {empreendimentos.map(emp => (
-              <div key={emp.id} className="empreendimento-card">
-                <div className="card-header">
-                  <h3>{emp.nome}</h3>
-                  <span className="arquivo-count">{emp.arquivos.length} arquivos</span>
-                </div>
-                {emp.descricao && (
-                  <p className="descricao">{emp.descricao}</p>
-                )}
-                <div className="card-actions">
-                  <label className="upload-btn">
-                    <input
-                      type="file"
-                      multiple
-                      onChange={(e) => handleFileUpload(e, emp.id)}
-                      style={{ display: 'none' }}
-                    />
-                    <span className="upload-icon">📎</span>
-                    Upload
-                  </label>
-                  <button 
-                    className="btn-outline"
-                    onClick={() => setEmpreendimentoSelecionado(emp)}
-                  >
-                    Configurar
-                  </button>
-                </div>
-                {emp.arquivos.length > 0 && (
-                  <div className="arquivos-list">
-                    {emp.arquivos.slice(0, 3).map((arquivo, idx) => (
-                      <div key={idx} className="arquivo-item">
-                        {arquivo.name}
-                      </div>
-                    ))}
-                    {emp.arquivos.length > 3 && (
-                      <div className="arquivo-item more">
-                        +{emp.arquivos.length - 3} mais
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
+              <EmpreendimentoCard
+                key={emp.id}
+                empreendimento={emp}
+                onFileUpload={handleFileUpload}
+                onConfigure={setEmpreendimentoSelecionado}
+              />
             ))}
           </div>
         )}
       </main>
 
       {/* Modal para Novo Empreendimento */}
-      {modalAberto && (
-        <div className="modal-overlay" onClick={() => setModalAberto(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Novo Empreendimento</h2>
-              <button 
-                className="close-btn"
-                onClick={() => setModalAberto(false)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="form-group">
-                <label>Nome do Empreendimento</label>
-                <input
-                  type="text"
-                  value={novoEmpreendimento.nome}
-                  onChange={(e) => setNovoEmpreendimento(prev => ({
-                    ...prev,
-                    nome: e.target.value
-                  }))}
-                  placeholder="Digite o nome..."
-                  autoFocus
-                />
-              </div>
-              <div className="form-group">
-                <label>Descrição (opcional)</label>
-                <textarea
-                  value={novoEmpreendimento.descricao}
-                  onChange={(e) => setNovoEmpreendimento(prev => ({
-                    ...prev,
-                    descricao: e.target.value
-                  }))}
-                  placeholder="Descrição do empreendimento..."
-                  rows={3}
-                />
-              </div>
-            </div>
-            <div className="modal-footer">
-              <button 
-                className="btn-outline"
-                onClick={() => setModalAberto(false)}
-              >
-                Cancelar
-              </button>
-              <button 
-                className="btn-primary"
-                onClick={criarEmpreendimento}
-                disabled={!novoEmpreendimento.nome.trim()}
-              >
-                Criar
-              </button>
-            </div>
+      <Modal
+        isOpen={isNewModalOpen}
+        onClose={() => setIsNewModalOpen(false)}
+        title="Novo Empreendimento"
+        footer={
+          <>
+            <button onClick={() => setIsNewModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-sm hover:bg-slate-50">
+              Cancelar
+            </button>
+            <button onClick={handleCriarEmpreendimento} disabled={!novoEmpreendimento.nome.trim()} className="px-4 py-2 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
+              Criar Empreendimento
+            </button>
+          </>
+        }
+      >
+        <div className="space-y-6">
+          <div>
+            <label htmlFor="nome" className="block text-sm font-medium text-slate-700 mb-1">Nome do Empreendimento</label>
+            <input type="text" id="nome" value={novoEmpreendimento.nome} onChange={(e) => setNovoEmpreendimento(p => ({ ...p, nome: e.target.value }))} className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" autoFocus />
+          </div>
+          <div>
+            <label htmlFor="descricao" className="block text-sm font-medium text-slate-700 mb-1">Descrição (opcional)</label>
+            <textarea id="descricao" value={novoEmpreendimento.descricao} onChange={(e) => setNovoEmpreendimento(p => ({ ...p, descricao: e.target.value }))} rows={3} className="w-full px-3 py-2 border border-slate-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
           </div>
         </div>
-      )}
+      </Modal>
 
       {/* Modal de Configurações */}
-      {empreendimentoSelecionado && (
-        <div className="modal-overlay" onClick={() => setEmpreendimentoSelecionado(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header">
-              <h2>Configurações - {empreendimentoSelecionado.nome}</h2>
-              <button 
-                className="close-btn"
-                onClick={() => setEmpreendimentoSelecionado(null)}
-              >
-                ×
-              </button>
-            </div>
-            <div className="modal-body">
-              <div className="config-section">
-                <h3>Arquivos Enviados</h3>
-                {empreendimentoSelecionado.arquivos.length === 0 ? (
-                  <p className="empty-files">Nenhum arquivo enviado ainda</p>
-                ) : (
-                  <div className="files-list">
-                    {empreendimentoSelecionado.arquivos.map((arquivo, idx) => (
-                      <div key={idx} className="file-item">
-                        <span className="file-icon">📄</span>
-                        <span className="file-name">{arquivo.name}</span>
-                        <span className="file-size">
-                          {(arquivo.size / 1024 / 1024).toFixed(2)} MB
-                        </span>
-                      </div>
-                    ))}
+      <Modal
+        isOpen={!!empreendimentoSelecionado}
+        onClose={() => setEmpreendimentoSelecionado(null)}
+        title={`Configurações: ${empreendimentoSelecionado?.nome}`}
+      >
+        <div className="space-y-8">
+          <section>
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Upload de Arquivos</h3>
+            <label className="flex justify-center w-full h-32 px-4 transition bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-slate-400 focus:outline-none">
+                <span className="flex items-center space-x-2">
+                    <UploadCloud className="w-8 h-8 text-slate-500" />
+                    <span className="font-medium text-slate-600">
+                        Arraste arquivos ou <span className="text-brand-start">clique para selecionar</span>
+                    </span>
+                </span>
+                <input type="file" multiple name="file_upload" className="hidden" onChange={(e) => empreendimentoSelecionado && handleFileUpload(e, empreendimentoSelecionado.id)} />
+            </label>
+          </section>
+          <section>
+            <h3 className="text-lg font-semibold text-slate-800 mb-4">Arquivos Enviados</h3>
+            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
+              {empreendimentoSelecionado?.arquivos.length === 0 ? (
+                <p className="text-slate-500 italic text-center py-4">Nenhum arquivo enviado.</p>
+              ) : (
+                empreendimentoSelecionado?.arquivos.map((file, index) => (
+                  <div key={index} className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
+                    <FileText className="h-6 w-6 text-brand-start flex-shrink-0" />
+                    <div className="flex-grow">
+                      <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
+                      <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
+                    </div>
+                    <button onClick={() => empreendimentoSelecionado && handleDeleteFile(empreendimentoSelecionado.id, index)} className="text-slate-400 hover:text-red-500 transition-colors">
+                      <Trash2 size={18} />
+                    </button>
                   </div>
-                )}
-              </div>
-              <div className="config-section">
-                <h3>Upload de Arquivos</h3>
-                <label className="upload-area">
-                  <input
-                    type="file"
-                    multiple
-                    onChange={(e) => handleFileUpload(e, empreendimentoSelecionado.id)}
-                    style={{ display: 'none' }}
-                  />
-                  <div className="upload-content">
-                    <span className="upload-icon large">📎</span>
-                    <p>Clique para fazer upload de arquivos</p>
-                    <small>Ou arraste arquivos aqui</small>
-                  </div>
-                </label>
-              </div>
+                ))
+              )}
             </div>
-          </div>
+          </section>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }
