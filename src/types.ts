@@ -1,7 +1,12 @@
+export interface ManagedFile {
+  file: File;
+  status: 'uploading' | 'completed';
+}
+
 export interface Empreendimento {
   id: string;
   nome: string;
   descricao: string;
-  arquivos: File[];
+  arquivos: ManagedFile[];
   criadoEm: Date;
 } 

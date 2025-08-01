@@ -8,6 +8,9 @@ interface EmpreendimentoCardProps {
 }
 
 export function EmpreendimentoCard({ empreendimento, onFileUpload, onConfigure }: EmpreendimentoCardProps) {
+  const completedFiles = empreendimento.arquivos.filter(f => f.status === 'completed').length;
+  const uploadingFiles = empreendimento.arquivos.filter(f => f.status === 'uploading').length;
+
   return (
     <div className="bg-white/80 backdrop-blur-xl border border-white/20 rounded-2xl shadow-lg p-6 flex flex-col transition-all duration-300 hover:shadow-2xl hover:-translate-y-1">
       <div className="flex-grow">
@@ -15,7 +18,10 @@ export function EmpreendimentoCard({ empreendimento, onFileUpload, onConfigure }
           <h3 className="text-xl font-bold text-slate-800">{empreendimento.nome}</h3>
           <div className="flex items-center gap-2 text-sm font-medium bg-indigo-100 text-brand-start px-3 py-1 rounded-full">
             <Paperclip size={14} />
-            <span>{empreendimento.arquivos.length}</span>
+            <span>{completedFiles}</span>
+            {uploadingFiles > 0 && (
+              <span className="text-xs text-slate-500">(+{uploadingFiles})</span>
+            )}
           </div>
         </div>
         <p className="text-slate-500 text-sm mb-6 h-10">{empreendimento.descricao || 'Sem descrição.'}</p>

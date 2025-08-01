@@ -3,28 +3,26 @@ import { Header } from './components/Header';
 import { EmptyState } from './components/EmptyState';
 import { EmpreendimentoCard } from './components/EmpreendimentoCard';
 import { Modal } from './components/Modal';
-import { FileText, Trash2, UploadCloud } from 'lucide-react';
-import type { Empreendimento } from './types';
-
-function formatFileSize(bytes: number) {
-  if (bytes === 0) return '0 Bytes';
-  const k = 1024;
-  const sizes = ['Bytes', 'KB', 'MB', 'GB'];
-  const i = Math.floor(Math.log(bytes) / Math.log(k));
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-}
+import { ConfigModal } from './components/ConfigModal';
+import { Spinner } from './components/Spinner';
+import type { Empreendimento, ManagedFile } from './types';
 
 function App() {
   const [empreendimentos, setEmpreendimentos] = useState<Empreendimento[]>([]);
   const [isNewModalOpen, setIsNewModalOpen] = useState(false);
   const [empreendimentoSelecionado, setEmpreendimentoSelecionado] = useState<Empreendimento | null>(null);
+  const [isCreating, setIsCreating] = useState(false);
   const [novoEmpreendimento, setNovoEmpreendimento] = useState({
     nome: '',
     descricao: ''
   });
 
   const handleCriarEmpreendimento = () => {
-    if (novoEmpreendimento.nome.trim()) {
+    if (!novoEmpreendimento.nome.trim() || isCreating) return;
+    setIsCreating(true);
+
+    // Simula uma chamada de API
+    setTimeout(() => {
       const novo: Empreendimento = {
         id: Date.now().toString(),
         nome: novoEmpreendimento.nome,
@@ -32,9 +30,19 @@ function App() {
         arquivos: [],
         criadoEm: new Date(),
       };
-      setEmpreendimentos([...empreendimentos, novo]);
+      setEmpreendimentos(prev => [...prev, novo]);
       setNovoEmpreendimento({ nome: '', descricao: '' });
       setIsNewModalOpen(false);
+      setIsCreating(false);
+    }, 1000);
+  };
+
+  const updateEmpreendimentoArquivos = (id: string, updateFn: (arquivos: ManagedFile[]) => ManagedFile[]) => {
+    setEmpreendimentos(prev =>
+      prev.map(emp => emp.id === id ? { ...emp, arquivos: updateFn(emp.arquivos) } : emp)
+    );
+    if (empreendimentoSelecionado?.id === id) {
+      setEmpreendimentoSelecionado(prev => prev ? { ...prev, arquivos: updateFn(prev.arquivos) } : null);
     }
   };
 
@@ -42,35 +50,27 @@ function App() {
     const files = Array.from(event.target.files || []);
     if (files.length === 0) return;
 
-    const updateEmpreendimentos = (empId: string, newFiles: File[]) => {
-      setEmpreendimentos(prev =>
-        prev.map(emp =>
-          emp.id === empId ? { ...emp, arquivos: [...emp.arquivos, ...newFiles] } : emp
-        )
-      );
-    };
-
-    updateEmpreendimentos(empreendimentoId, files);
-
-    if (empreendimentoSelecionado?.id === empreendimentoId) {
-      setEmpreendimentoSelecionado(prev => prev ? { ...prev, arquivos: [...prev.arquivos, ...files] } : null);
-    }
+    const newManagedFiles: ManagedFile[] = files.map(file => ({ file, status: 'uploading' }));
+    updateEmpreendimentoArquivos(empreendimentoId, arquivos => [...arquivos, ...newManagedFiles]);
+    
+    // Simula o tempo de upload para cada arquivo
+    newManagedFiles.forEach((managedFile, index) => {
+      setTimeout(() => {
+        updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
+          arquivos.map(f => f === managedFile ? { ...f, status: 'completed' } : f)
+        );
+      }, 1500 + (index * 200));
+    });
   };
   
   const handleDeleteFile = (empreendimentoId: string, fileIndex: number) => {
-    const updateFunction = (prev: Empreendimento[]) =>
-      prev.map(emp =>
-        emp.id === empreendimentoId
-          ? { ...emp, arquivos: emp.arquivos.filter((_, idx) => idx !== fileIndex) }
-          : emp
-      );
-    setEmpreendimentos(updateFunction);
+    updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, idx) => idx !== fileIndex));
+  };
 
-    if (empreendimentoSelecionado?.id === empreendimentoId) {
-      setEmpreendimentoSelecionado(prev =>
-        prev ? { ...prev, arquivos: prev.arquivos.filter((_, idx) => idx !== fileIndex) } : null
-      );
-    }
+  const handleSaveEmpreendimento = (id: string, data: { nome: string; descricao: string }) => {
+    setEmpreendimentos(prev =>
+      prev.map(emp => emp.id === id ? { ...emp, ...data } : emp)
+    );
   };
 
   return (
@@ -82,13 +82,14 @@ function App() {
           <EmptyState onNewEmpreendimento={() => setIsNewModalOpen(true)} />
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-            {empreendimentos.map(emp => (
-              <EmpreendimentoCard
-                key={emp.id}
-                empreendimento={emp}
-                onFileUpload={handleFileUpload}
-                onConfigure={setEmpreendimentoSelecionado}
-              />
+            {empreendimentos.map((emp, index) => (
+              <div key={emp.id} style={{ animationDelay: `${index * 100}ms` }} className="opacity-0 animate-fade-in">
+                <EmpreendimentoCard
+                  empreendimento={emp}
+                  onFileUpload={handleFileUpload}
+                  onConfigure={setEmpreendimentoSelecionado}
+                />
+              </div>
             ))}
           </div>
         )}
@@ -104,8 +105,12 @@ function App() {
             <button onClick={() => setIsNewModalOpen(false)} className="px-4 py-2 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-sm hover:bg-slate-50">
               Cancelar
             </button>
-            <button onClick={handleCriarEmpreendimento} disabled={!novoEmpreendimento.nome.trim()} className="px-4 py-2 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed">
-              Criar Empreendimento
+            <button 
+              onClick={handleCriarEmpreendimento} 
+              disabled={!novoEmpreendimento.nome.trim() || isCreating} 
+              className="w-48 flex items-center justify-center px-4 py-2 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-md disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              {isCreating ? <Spinner /> : 'Criar Empreendimento'}
             </button>
           </>
         }
@@ -123,47 +128,15 @@ function App() {
       </Modal>
 
       {/* Modal de Configurações */}
-      <Modal
-        isOpen={!!empreendimentoSelecionado}
-        onClose={() => setEmpreendimentoSelecionado(null)}
-        title={`Configurações: ${empreendimentoSelecionado?.nome}`}
-      >
-        <div className="space-y-8">
-          <section>
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Upload de Arquivos</h3>
-            <label className="flex justify-center w-full h-32 px-4 transition bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-slate-400 focus:outline-none">
-                <span className="flex items-center space-x-2">
-                    <UploadCloud className="w-8 h-8 text-slate-500" />
-                    <span className="font-medium text-slate-600">
-                        Arraste arquivos ou <span className="text-brand-start">clique para selecionar</span>
-                    </span>
-                </span>
-                <input type="file" multiple name="file_upload" className="hidden" onChange={(e) => empreendimentoSelecionado && handleFileUpload(e, empreendimentoSelecionado.id)} />
-            </label>
-          </section>
-          <section>
-            <h3 className="text-lg font-semibold text-slate-800 mb-4">Arquivos Enviados</h3>
-            <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
-              {empreendimentoSelecionado?.arquivos.length === 0 ? (
-                <p className="text-slate-500 italic text-center py-4">Nenhum arquivo enviado.</p>
-              ) : (
-                empreendimentoSelecionado?.arquivos.map((file, index) => (
-                  <div key={index} className="flex items-center gap-4 bg-slate-50 p-3 rounded-lg border border-slate-200">
-                    <FileText className="h-6 w-6 text-brand-start flex-shrink-0" />
-                    <div className="flex-grow">
-                      <p className="text-sm font-medium text-slate-700 truncate">{file.name}</p>
-                      <p className="text-xs text-slate-500">{formatFileSize(file.size)}</p>
-                    </div>
-                    <button onClick={() => empreendimentoSelecionado && handleDeleteFile(empreendimentoSelecionado.id, index)} className="text-slate-400 hover:text-red-500 transition-colors">
-                      <Trash2 size={18} />
-                    </button>
-                  </div>
-                ))
-              )}
-            </div>
-          </section>
-        </div>
-      </Modal>
+      {empreendimentoSelecionado && (
+        <ConfigModal
+          empreendimento={empreendimentoSelecionado}
+          onClose={() => setEmpreendimentoSelecionado(null)}
+          onSave={handleSaveEmpreendimento}
+          onFileUpload={handleFileUpload}
+          onDeleteFile={handleDeleteFile}
+        />
+      )}
     </div>
   );
 }
