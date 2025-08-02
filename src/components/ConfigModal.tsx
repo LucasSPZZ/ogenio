@@ -8,8 +8,9 @@ interface ConfigModalProps {
   empreendimento: Empreendimento | null;
   onClose: () => void;
   onSave: (id: string, data: { nome: string; descricao: string }) => void;
-  onFileUpload: (event: React.ChangeEvent<HTMLInputElement>, id: string) => void;
+  onFileUpload: (event: React.ChangeEvent<HTMLInputElement> | DragEvent, id: string) => void;
   onDeleteFile: (empreendimentoId: string, fileIndex: number) => void;
+  onClearAllFiles: (empreendimentoId: string) => void;
 }
 
 function formatFileSize(bytes: number) {
@@ -20,7 +21,7 @@ function formatFileSize(bytes: number) {
   return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
 }
 
-export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onDeleteFile }: ConfigModalProps) {
+export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onDeleteFile, onClearAllFiles }: ConfigModalProps) {
   const [activeTab, setActiveTab] = useState<'geral' | 'arquivos'>('geral');
   const [nome, setNome] = useState(empreendimento?.nome || '');
   const [descricao, setDescricao] = useState(empreendimento?.descricao || '');
@@ -32,10 +33,16 @@ export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onD
     onSave(empreendimento.id, { nome, descricao });
     onClose();
   };
+
+  const handleClear = () => {
+    if (window.confirm("Tem certeza que deseja remover todos os arquivos deste empreendimento? Esta ação não pode ser desfeita.")) {
+      onClearAllFiles(empreendimento.id);
+    }
+  }
   
   const renderFileItem = (managedFile: ManagedFile, index: number) => {
     let icon;
-    if (managedFile.status === 'uploading') {
+    if (managedFile.status === 'uploading' || managedFile.status === 'deleting') {
       icon = <Spinner className="h-6 w-6 text-slate-400" />;
     } else if (managedFile.status === 'completed') {
       icon = <FileText className="h-6 w-6 text-brand-start flex-shrink-0" />;
@@ -54,7 +61,7 @@ export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onD
             {managedFile.status === 'error' && <span className="text-red-600 truncate">{managedFile.error}</span>}
           </div>
         </div>
-        <button onClick={() => onDeleteFile(empreendimento.id, index)} className="text-slate-400 hover:text-red-500 transition-colors">
+        <button onClick={() => onDeleteFile(empreendimento.id, index)} disabled={managedFile.status === 'deleting'} className="text-slate-400 hover:text-red-500 transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
           <Trash2 size={18} />
         </button>
       </div>
@@ -102,11 +109,12 @@ export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onD
       {activeTab === 'arquivos' && (
         <div className="space-y-8 animate-fade-in">
           <section>
+            <h3 className="text-lg font-semibold text-slate-800 mb-2">Upload de Arquivos</h3>
             <label 
               className={`flex justify-center w-full h-32 px-4 transition-colors bg-white border-2 border-slate-300 border-dashed rounded-md appearance-none cursor-pointer hover:border-brand-start focus:outline-none ${isDragOver ? 'border-brand-start bg-indigo-50' : ''}`}
               onDragOver={(e) => { e.preventDefault(); setIsDragOver(true); }}
               onDragLeave={() => setIsDragOver(false)}
-              onDrop={(e) => { e.preventDefault(); setIsDragOver(false); /* A lógica de drop é tratada pelo input */ }}
+              onDrop={(e) => { e.preventDefault(); setIsDragOver(false); onFileUpload(e as any, empreendimento.id) }}
             >
                 <span className="flex items-center space-x-2 pointer-events-none">
                     <UploadCloud className="w-8 h-8 text-slate-500" />
@@ -118,6 +126,12 @@ export function ConfigModal({ empreendimento, onClose, onSave, onFileUpload, onD
             </label>
           </section>
           <section>
+            <div className="flex justify-between items-center mb-2">
+                <h3 className="text-lg font-semibold text-slate-800">Arquivos Enviados</h3>
+                {empreendimento.arquivos.length > 0 && (
+                    <button onClick={handleClear} className="text-sm text-red-600 font-medium hover:underline">Remover Todos</button>
+                )}
+            </div>
             <div className="space-y-3 max-h-60 overflow-y-auto pr-2">
               {empreendimento.arquivos.length === 0 ? (
                 <p className="text-slate-500 italic text-center py-4">Nenhum arquivo enviado.</p>

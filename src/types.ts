@@ -1,6 +1,6 @@
 export interface ManagedFile {
   file: File;
-  status: 'uploading' | 'completed' | 'error';
+  status: 'uploading' | 'completed' | 'error' | 'deleting';
   driveId?: string;
   error?: string;
 }

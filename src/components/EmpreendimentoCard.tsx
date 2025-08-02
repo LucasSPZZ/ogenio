@@ -1,13 +1,14 @@
-import { Upload, Settings, Paperclip } from 'lucide-react';
+import { Upload, Settings, Paperclip, Trash2 } from 'lucide-react';
 import type { Empreendimento } from '../types';
 
 interface EmpreendimentoCardProps {
   empreendimento: Empreendimento;
   onFileUpload: (event: React.ChangeEvent<HTMLInputElement>, id: string) => void;
   onConfigure: (empreendimento: Empreendimento) => void;
+  onDelete: (id: string, name: string) => void;
 }
 
-export function EmpreendimentoCard({ empreendimento, onFileUpload, onConfigure }: EmpreendimentoCardProps) {
+export function EmpreendimentoCard({ empreendimento, onFileUpload, onConfigure, onDelete }: EmpreendimentoCardProps) {
   const completedFiles = empreendimento.arquivos.filter(f => f.status === 'completed').length;
   const uploadingFiles = empreendimento.arquivos.filter(f => f.status === 'uploading').length;
 
@@ -27,23 +28,32 @@ export function EmpreendimentoCard({ empreendimento, onFileUpload, onConfigure }
         <p className="text-slate-500 text-sm mb-6 h-10">{empreendimento.descricao || 'Sem descrição.'}</p>
       </div>
 
-      <div className="border-t border-slate-200 pt-4 flex flex-col sm:flex-row gap-3">
-        <label className="flex-1 cursor-pointer w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
-          <Upload size={16} />
-          <span>Upload</span>
-          <input
-            type="file"
-            multiple
-            onChange={(e) => onFileUpload(e, empreendimento.id)}
-            className="hidden"
-          />
-        </label>
+      <div className="border-t border-slate-200 pt-4 flex flex-col gap-3">
+        <div className="flex sm:flex-row flex-col gap-3">
+            <label className="flex-1 cursor-pointer w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-white border border-slate-300 text-slate-700 font-semibold rounded-lg shadow-sm hover:bg-slate-50 transition-colors">
+              <Upload size={16} />
+              <span>Upload</span>
+              <input
+                type="file"
+                multiple
+                onChange={(e) => onFileUpload(e, empreendimento.id)}
+                className="hidden"
+              />
+            </label>
+            <button
+              onClick={() => onConfigure(empreendimento)}
+              className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white font-semibold rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
+            >
+              <Settings size={16} />
+              Configurar
+            </button>
+        </div>
         <button
-          onClick={() => onConfigure(empreendimento)}
-          className="flex-1 w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-slate-700 text-white font-semibold rounded-lg shadow-sm hover:bg-slate-800 transition-colors"
+            onClick={() => onDelete(empreendimento.id, empreendimento.nome)}
+            className="w-full inline-flex items-center justify-center gap-2 px-4 py-2 bg-red-50 border border-red-200 text-red-600 font-semibold rounded-lg shadow-sm hover:bg-red-100 transition-colors"
         >
-          <Settings size={16} />
-          Configurar
+            <Trash2 size={16} />
+            Excluir Empreendimento
         </button>
       </div>
     </div>

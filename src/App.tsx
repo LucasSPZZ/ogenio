@@ -21,12 +21,24 @@ function App() {
   const [isDemoMode, setIsDemoMode] = useState(false);
 
   useEffect(() => {
+    console.log('Inicializando aplicação...');
     setIsDemoMode(googleDrive.isDemoMode);
+    
+    // Timeout de segurança para evitar carregamento infinito
+    const timeoutId = setTimeout(() => {
+      console.log('Timeout de segurança ativado - forçando inicialização');
+      setIsGapiReady(true);
+    }, 5000); // 5 segundos
+    
     googleDrive.initClient((signedIn) => {
+      console.log('Cliente inicializado, usuário logado:', signedIn);
+      clearTimeout(timeoutId); // Cancela o timeout se inicializou com sucesso
       setIsSignedIn(signedIn);
-      if (!isGapiReady) setIsGapiReady(true);
+      setIsGapiReady(true);
     });
-  }, [isGapiReady]);
+    
+    return () => clearTimeout(timeoutId); // Cleanup
+  }, []); // Removida a dependência isGapiReady que causava loop infinito
 
   const handleSignOut = () => {
     googleDrive.signOut(() => {
@@ -58,6 +70,25 @@ function App() {
     }
   };
 
+  const handleDeleteEmpreendimento = async (empreendimentoId: string, empreendimentoName: string) => {
+    if (!window.confirm(`Tem certeza que deseja excluir o empreendimento "${empreendimentoName}"? Esta ação removerá a pasta e todos os arquivos do seu Google Drive permanentemente.`)) {
+      return;
+    }
+
+    const target = empreendimentos.find(e => e.id === empreendimentoId);
+    if (!target) return;
+
+    try {
+      if (!isDemoMode && target.driveFolderId) {
+        await googleDrive.deleteFile(target.driveFolderId);
+      }
+      setEmpreendimentos(prev => prev.filter(e => e.id !== empreendimentoId));
+    } catch (error) {
+        console.error("Erro ao excluir empreendimento:", error);
+        alert(`Não foi possível excluir o empreendimento. Verifique se a pasta ainda existe no seu Google Drive.`);
+    }
+  };
+
   const updateEmpreendimentoArquivos = (id: string, updateFn: (arquivos: ManagedFile[]) => ManagedFile[]) => {
     setEmpreendimentos(prev =>
       prev.map(emp => (emp.id === id ? { ...emp, arquivos: updateFn(emp.arquivos) } : emp))
@@ -67,11 +98,11 @@ function App() {
     }
   };
 
-  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>, empreendimentoId: string) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement> | DragEvent, empreendimentoId: string) => {
     const targetEmpreendimento = empreendimentos.find(e => e.id === empreendimentoId);
     if (!targetEmpreendimento || !targetEmpreendimento.driveFolderId) return;
 
-    const files = Array.from(event.target.files || []);
+    const files = 'dataTransfer' in event ? Array.from((event as DragEvent).dataTransfer?.files || []) : Array.from(event.target.files || []);
     if (files.length === 0) return;
 
     const newManagedFiles: ManagedFile[] = files.map(file => ({ file, status: 'uploading' }));
@@ -92,24 +123,69 @@ function App() {
   };
   
   const handleDeleteFile = async (empreendimentoId: string, fileIndex: number) => {
-    const targetEmpreendimento = empreendimentos.find(e => e.id === empreendimentoId);
-    const fileToDelete = targetEmpreendimento?.arquivos[fileIndex];
-    if (!fileToDelete?.driveId) return;
+    const fileToDelete = empreendimentos.find(e => e.id === empreendimentoId)?.arquivos[fileIndex];
+    if (!fileToDelete) return;
+
+    updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
+      arquivos.map((f, i) => i === fileIndex ? { ...f, status: 'deleting' } : f)
+    );
 
     try {
-      await googleDrive.deleteFile(fileToDelete.driveId);
-      updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, idx) => idx !== fileIndex));
-    } catch (error) {
-      alert("Falha ao deletar o arquivo.");
+      if (!isDemoMode && fileToDelete.driveId) {
+        await googleDrive.deleteFile(fileToDelete.driveId);
+      }
+      updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, i) => i !== fileIndex));
+    } catch (error: any) {
+      console.error("Erro ao deletar arquivo:", error);
+      if (error.message && error.message.toLowerCase().includes('file not found')) {
+        console.log("Arquivo não encontrado no Drive, removendo apenas da interface.");
+        updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, i) => i !== fileIndex));
+      } else {
+        alert("Falha ao deletar o arquivo.");
+        updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
+          arquivos.map((f, i) => i === fileIndex ? { ...f, status: 'error', error: 'Falha ao deletar' } : f)
+        );
+      }
     }
   };
+  
+  const handleClearAllFiles = async (empreendimentoId: string) => {
+    const target = empreendimentos.find(e => e.id === empreendimentoId);
+    if (!target || target.arquivos.length === 0) return;
+
+    updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
+        arquivos.map(f => ({ ...f, status: 'deleting' }))
+    );
+
+    try {
+        if (!isDemoMode) {
+            const deletePromises = target.arquivos
+                .filter(f => f.driveId)
+                .map(f => googleDrive.deleteFile(f.driveId!));
+            await Promise.all(deletePromises);
+        }
+        updateEmpreendimentoArquivos(empreendimentoId, () => []);
+    } catch (error) {
+        console.error("Erro ao limpar arquivos:", error);
+        alert("Falha ao remover todos os arquivos. Tente novamente.");
+        updateEmpreendimentoArquivos(empreendimentoId, () => target.arquivos.map(f => ({...f, status: 'completed'})));
+    }
+  }
 
   const handleSaveEmpreendimento = (id: string, data: { nome: string; descricao: string }) => {
     setEmpreendimentos(prev => prev.map(emp => (emp.id === id ? { ...emp, ...data } : emp)));
   };
   
   if (!isGapiReady) {
-    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Spinner className="w-10 h-10 text-brand-start" /></div>;
+    return (
+      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100">
+        <div className="text-center">
+          <Spinner className="w-12 h-12 text-brand-start mx-auto mb-4" />
+          <h2 className="text-xl font-semibold text-slate-800 mb-2">Inicializando Genio</h2>
+          <p className="text-slate-600">Carregando configurações...</p>
+        </div>
+      </div>
+    );
   }
 
   if (!isSignedIn) {
@@ -153,7 +229,7 @@ function App() {
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {empreendimentos.map((emp, index) => (
               <div key={emp.id} style={{ animationDelay: `${index * 100}ms` }} className="opacity-0 animate-fade-in">
-                <EmpreendimentoCard empreendimento={emp} onFileUpload={handleFileUpload} onConfigure={setEmpreendimentoSelecionado} />
+                <EmpreendimentoCard empreendimento={emp} onFileUpload={handleFileUpload} onConfigure={setEmpreendimentoSelecionado} onDelete={handleDeleteEmpreendimento} />
               </div>
             ))}
           </div>
@@ -176,7 +252,14 @@ function App() {
       </Modal>
 
       {empreendimentoSelecionado && (
-        <ConfigModal empreendimento={empreendimentoSelecionado} onClose={() => setEmpreendimentoSelecionado(null)} onSave={handleSaveEmpreendimento} onFileUpload={handleFileUpload} onDeleteFile={handleDeleteFile} />
+        <ConfigModal 
+            empreendimento={empreendimentoSelecionado} 
+            onClose={() => setEmpreendimentoSelecionado(null)} 
+            onSave={handleSaveEmpreendimento} 
+            onFileUpload={handleFileUpload} 
+            onDeleteFile={handleDeleteFile}
+            onClearAllFiles={handleClearAllFiles}
+        />
       )}
     </div>
   );

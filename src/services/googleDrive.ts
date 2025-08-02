@@ -1,3 +1,5 @@
+let tokenClient: any = null;
+
 const API_KEY = import.meta.env.VITE_GOOGLE_API_KEY;
 const CLIENT_ID = import.meta.env.VITE_GOOGLE_CLIENT_ID;
 const SCOPES = 'https://www.googleapis.com/auth/drive.file';
@@ -5,141 +7,85 @@ const SCOPES = 'https://www.googleapis.com/auth/drive.file';
 export const isDemoMode = !API_KEY || API_KEY.includes('SUA_CHAVE') || 
                           !CLIENT_ID || CLIENT_ID.includes('SEU_ID');
 
-let tokenClient: any = null;
-let isInitialized = false;
+const handleGapiLoad = (callback: (isSignedIn: boolean) => void) => {
+  console.log('Inicializando GAPI e GIS...');
+  
+  window.gapi.load('client', () => {
+    console.log('GAPI client carregado, inicializando...');
+    window.gapi.client.init({
+      apiKey: API_KEY,
+      discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
+    }).then(() => {
+      console.log('GAPI client inicializado com sucesso.');
+    }).catch((err: any) => console.error("Erro ao inicializar GAPI client:", err));
+  });
+
+  try {
+    tokenClient = window.google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: SCOPES,
+      callback: (tokenResponse: any) => {
+        console.log('Token response recebido:', tokenResponse);
+        if (tokenResponse && tokenResponse.access_token) {
+          window.gapi.client.setToken(tokenResponse);
+          callback(true);
+        } else {
+          console.error("Erro na resposta do token:", tokenResponse);
+          callback(false);
+        }
+      },
+    });
+    console.log('Token client inicializado com sucesso.');
+  } catch (error) {
+    console.error('Erro ao inicializar token client:', error);
+  }
+  
+  // O usuário não está logado na inicialização
+  callback(false);
+};
 
 export const initClient = (callback: (isSignedIn: boolean) => void) => {
-  console.log('Inicializando cliente...', { isDemoMode, API_KEY: API_KEY ? 'Configurado' : 'Não configurado' });
+  console.log('initClient chamado, modo demo:', isDemoMode);
   
-  // Se está em modo demo, não precisa carregar nada
   if (isDemoMode) {
-    console.log('Modo demo ativado - pulando inicialização da API do Google');
-    isInitialized = true;
-    setTimeout(() => callback(false), 100);
+    console.log('Modo de demonstração ativado.');
+    setTimeout(() => callback(false), 50); // Simula pequena espera
     return;
   }
-
-  // Verifica se os scripts já estão carregados
-  if (!window.gapi || !window.google) {
-    console.log('Scripts do Google não carregados, carregando...');
-    loadGoogleScripts(() => {
-      initializeGoogleAPIs(callback);
-    });
-  } else {
-    console.log('Scripts do Google já carregados');
-    initializeGoogleAPIs(callback);
-  }
-};
-
-const loadGoogleScripts = (onComplete: () => void) => {
-  let scriptsLoaded = 0;
-  const totalScripts = 2;
   
-  const checkComplete = () => {
-    scriptsLoaded++;
-    if (scriptsLoaded === totalScripts) {
-      onComplete();
-    }
-  };
-
-  // Carrega GAPI
-  if (!document.querySelector('script[src*="apis.google.com/js/api.js"]')) {
-    const scriptGapi = document.createElement('script');
-    scriptGapi.src = 'https://apis.google.com/js/api.js';
-    scriptGapi.async = true;
-    scriptGapi.onload = checkComplete;
-    scriptGapi.onerror = () => {
-      console.error('Erro ao carregar GAPI script');
-      checkComplete();
-    };
-    document.head.appendChild(scriptGapi);
-  } else {
-    checkComplete();
-  }
-
-  // Carrega GIS
-  if (!document.querySelector('script[src*="accounts.google.com/gsi/client"]')) {
-    const scriptGis = document.createElement('script');
-    scriptGis.src = 'https://accounts.google.com/gsi/client';
-    scriptGis.async = true;
-    scriptGis.onload = checkComplete;
-    scriptGis.onerror = () => {
-      console.error('Erro ao carregar GIS script');
-      checkComplete();
-    };
-    document.head.appendChild(scriptGis);
-  } else {
-    checkComplete();
-  }
-};
-
-const initializeGoogleAPIs = (callback: (isSignedIn: boolean) => void) => {
-  const initGapi = () => {
-    if (!window.gapi) {
-      console.error('GAPI não disponível');
-      callback(false);
-      return;
-    }
-
-    window.gapi.load('client', () => {
-      window.gapi.client.init({
-        apiKey: API_KEY,
-        discoveryDocs: ['https://www.googleapis.com/discovery/v1/apis/drive/v3/rest'],
-      }).then(() => {
-        console.log('GAPI inicializado com sucesso');
-        initGIS(callback);
-      }).catch((error: any) => {
-        console.error('Erro ao inicializar GAPI:', error);
-        callback(false);
-      });
+  let attempts = 0;
+  const maxAttempts = 50; // Máximo 5 segundos (50 * 100ms)
+  
+  // Tenta inicializar repetidamente até que os scripts estejam prontos
+  const checkAndInit = () => {
+    attempts++;
+    console.log(`Verificando scripts... (tentativa ${attempts}/${maxAttempts})`, { 
+      gapi: !!window.gapi, 
+      google: !!window.google,
+      googleAccounts: !!window.google?.accounts,
+      googleOAuth2: !!window.google?.accounts?.oauth2
     });
-  };
-
-  const initGIS = (callback: (isSignedIn: boolean) => void) => {
-    if (!window.google?.accounts?.oauth2) {
-      console.error('Google Identity Services não disponível');
-      callback(false);
-      return;
-    }
-
-    try {
-      tokenClient = window.google.accounts.oauth2.initTokenClient({
-        client_id: CLIENT_ID,
-        scope: SCOPES,
-        callback: (tokenResponse: any) => {
-          if (tokenResponse && tokenResponse.access_token) {
-            console.log('Token recebido com sucesso');
-            window.gapi.client.setToken(tokenResponse);
-            isInitialized = true;
-            callback(true);
-          } else {
-            console.error('Erro no token response:', tokenResponse);
-            callback(false);
-          }
-        },
-      });
-      console.log('GIS inicializado com sucesso');
-      isInitialized = true;
-      callback(false); // Não está logado ainda
-    } catch (error) {
-      console.error('Erro ao inicializar GIS:', error);
-      callback(false);
+    
+    if (window.gapi && window.google?.accounts?.oauth2) {
+      console.log('Scripts prontos, inicializando...');
+      handleGapiLoad(callback);
+    } else if (attempts >= maxAttempts) {
+      console.error('Timeout: Scripts do Google não carregaram após', maxAttempts, 'tentativas');
+      console.log('Forçando modo demo devido a falha no carregamento dos scripts');
+      callback(false); // Força modo demo
+    } else {
+      console.log('Scripts ainda não carregados, aguardando...');
+      setTimeout(checkAndInit, 100);
     }
   };
-
-  // Aguarda um pouco para garantir que os scripts carregaram
-  setTimeout(initGapi, 100);
+  checkAndInit();
 };
 
 export const signIn = () => {
-  if (isDemoMode) {
-    console.log('Tentativa de login em modo demo ignorada');
-    return Promise.resolve();
-  }
-  
+  if (isDemoMode) return Promise.resolve();
   if (!tokenClient) {
-    console.error('Token client não inicializado');
-    return Promise.reject('Cliente não inicializado');
+    console.error('Token client não inicializado. Tentando inicializar novamente...');
+    return Promise.reject("Cliente de token não inicializado.");
   }
   
   console.log('Iniciando processo de login...');
@@ -149,131 +95,76 @@ export const signIn = () => {
 
 export const signOut = (callback: () => void) => {
   if (isDemoMode) {
-    console.log('Logout em modo demo');
     callback();
     return;
   }
   
-  if (!window.gapi?.client?.getToken()) {
-    console.log('Usuário não estava logado');
-    callback();
-    return;
-  }
-
-  try {
-    const token = window.gapi.client.getToken();
-    if (token && window.google?.accounts?.oauth2) {
-      window.google.accounts.oauth2.revoke(token.access_token, () => {
-        window.gapi.client.setToken(null);
-        console.log('Logout realizado com sucesso');
-        callback();
-      });
-    } else {
+  const token = window.gapi?.client?.getToken();
+  if (token) {
+    window.google.accounts.oauth2.revoke(token.access_token, () => {
       window.gapi.client.setToken(null);
       callback();
-    }
-  } catch (error) {
-    console.error('Erro no logout:', error);
+    });
+  } else {
     callback();
   }
+};
+
+const createApiRequest = async (path: string, method: 'POST' | 'DELETE', body?: any) => {
+  const token = window.gapi.client.getToken();
+  if (!token) throw new Error('Usuário não autenticado');
+
+  const response = await fetch(`https://www.googleapis.com/drive/v3/${path}`, {
+    method,
+    headers: { 'Authorization': `Bearer ${token.access_token}`, 'Content-Type': 'application/json' },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+
+  if (!response.ok) {
+    const error = await response.json();
+    throw new Error(error.error.message || `Falha na requisição: ${response.statusText}`);
+  }
+  return response.json();
 };
 
 export const createFolder = async (folderName: string): Promise<string> => {
   if (isDemoMode) {
-    console.log(`Criando pasta demo: ${folderName}`);
     await new Promise(resolve => setTimeout(resolve, 500));
     return `demo-folder-${Date.now()}`;
   }
-
-  if (!window.gapi?.client?.drive) {
-    throw new Error('Google Drive API não disponível');
-  }
-
-  try {
-    const response = await window.gapi.client.drive.files.create({
-      resource: {
-        name: folderName,
-        mimeType: 'application/vnd.google-apps.folder'
-      }
-    });
-    return response.result.id;
-  } catch (error) {
-    console.error('Erro ao criar pasta:', error);
-    throw error;
-  }
+  const metadata = { name: folderName, mimeType: 'application/vnd.google-apps.folder' };
+  const result = await createApiRequest('files', 'POST', metadata);
+  return result.id;
 };
 
 export const uploadFile = async (folderId: string, file: File): Promise<string> => {
   if (isDemoMode) {
-    console.log(`Upload demo: ${file.name}`);
     await new Promise(resolve => setTimeout(resolve, 1000));
     return `demo-file-${Date.now()}`;
   }
+  const token = window.gapi.client.getToken();
+  if (!token) throw new Error('Usuário não autenticado');
 
-  const token = window.gapi?.client?.getToken();
-  if (!token) {
-    throw new Error('Usuário não autenticado');
-  }
-
-  const metadata = {
-    name: file.name,
-    parents: [folderId],
-  };
-
+  const metadata = { name: file.name, parents: [folderId] };
   const form = new FormData();
   form.append('metadata', new Blob([JSON.stringify(metadata)], { type: 'application/json' }));
   form.append('file', file);
 
-  try {
-    const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-      },
-      body: form,
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro no upload: ${response.status}`);
-    }
-
-    const result = await response.json();
-    return result.id;
-  } catch (error) {
-    console.error('Erro no upload:', error);
-    throw error;
-  }
+  const response = await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart', {
+    method: 'POST',
+    headers: { 'Authorization': `Bearer ${token.access_token}` },
+    body: form,
+  });
+  
+  const result = await response.json();
+  if (result.error) throw new Error(result.error.message);
+  return result.id;
 };
 
 export const deleteFile = async (fileId: string): Promise<void> => {
-  if (isDemoMode) {
-    console.log(`Deletando arquivo demo: ${fileId}`);
+  if (isDemoMode || fileId.startsWith('demo-')) {
     await new Promise(resolve => setTimeout(resolve, 300));
     return;
   }
-
-  if (fileId.startsWith('demo-')) {
-    return; // Não tenta deletar arquivos de demo
-  }
-
-  const token = window.gapi?.client?.getToken();
-  if (!token) {
-    throw new Error('Usuário não autenticado');
-  }
-
-  try {
-    const response = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}`, {
-      method: 'DELETE',
-      headers: {
-        'Authorization': `Bearer ${token.access_token}`,
-      },
-    });
-
-    if (!response.ok) {
-      throw new Error(`Erro ao deletar: ${response.status}`);
-    }
-  } catch (error) {
-    console.error('Erro ao deletar arquivo:', error);
-    throw error;
-  }
+  await createApiRequest(`files/${fileId}`, 'DELETE');
 }; 
