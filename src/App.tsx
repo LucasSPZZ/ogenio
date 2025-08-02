@@ -5,7 +5,7 @@ import { EmpreendimentoCard } from './components/EmpreendimentoCard';
 import { Modal } from './components/Modal';
 import { ConfigModal } from './components/ConfigModal';
 import { Spinner } from './components/Spinner';
-import * as googleDrive from './services/googleDrive';
+import * as driveService from './services/googleDrive';
 import type { Empreendimento, ManagedFile } from './types';
 import { LogIn, AlertCircle } from 'lucide-react';
 
@@ -15,42 +15,31 @@ function App() {
   const [empreendimentoSelecionado, setEmpreendimentoSelecionado] = useState<Empreendimento | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [novoEmpreendimento, setNovoEmpreendimento] = useState({ nome: '', descricao: '' });
-  
-  const [isGapiReady, setIsGapiReady] = useState(false);
+
+  const [isInitialized, setIsInitialized] = useState(false);
   const [isSignedIn, setIsSignedIn] = useState(false);
-  const [isDemoMode, setIsDemoMode] = useState(false);
+  const isDemoMode = driveService.isDemoMode;
 
   useEffect(() => {
-    console.log('Inicializando aplicação...');
-    setIsDemoMode(googleDrive.isDemoMode);
-    
-    // Timeout de segurança para evitar carregamento infinito
-    const timeoutId = setTimeout(() => {
-      console.log('Timeout de segurança ativado - forçando inicialização');
-      setIsGapiReady(true);
-    }, 5000); // 5 segundos
-    
-    googleDrive.initClient((signedIn) => {
-      console.log('Cliente inicializado, usuário logado:', signedIn);
-      clearTimeout(timeoutId); // Cancela o timeout se inicializou com sucesso
+    driveService.initClient((signedIn) => {
       setIsSignedIn(signedIn);
-      setIsGapiReady(true);
+      if (!isInitialized) setIsInitialized(true);
     });
-    
-    return () => clearTimeout(timeoutId); // Cleanup
-  }, []); // Removida a dependência isGapiReady que causava loop infinito
+  }, [isInitialized]);
 
-  const handleSignOut = () => {
-    googleDrive.signOut(() => {
-      setIsSignedIn(false);
-    });
+  const handleSignIn = () => {
+    if (isDemoMode) {
+      setIsSignedIn(true);
+    } else {
+      driveService.signIn();
+    }
   };
 
   const handleCriarEmpreendimento = async () => {
     if (!novoEmpreendimento.nome.trim() || isCreating) return;
     setIsCreating(true);
     try {
-      const folderId = await googleDrive.createFolder(novoEmpreendimento.nome);
+      const folderId = await driveService.createFolder(novoEmpreendimento.nome);
       const novo: Empreendimento = {
         id: Date.now().toString(),
         nome: novoEmpreendimento.nome,
@@ -64,7 +53,7 @@ function App() {
       setIsNewModalOpen(false);
     } catch (error) {
       console.error("Erro ao criar:", error);
-      alert("Não foi possível criar o empreendimento.");
+      alert(`Não foi possível criar o empreendimento: ${error}`);
     } finally {
       setIsCreating(false);
     }
@@ -80,7 +69,7 @@ function App() {
 
     try {
       if (!isDemoMode && target.driveFolderId) {
-        await googleDrive.deleteFile(target.driveFolderId);
+        await driveService.deleteFile(target.driveFolderId);
       }
       setEmpreendimentos(prev => prev.filter(e => e.id !== empreendimentoId));
     } catch (error) {
@@ -110,7 +99,8 @@ function App() {
     
     newManagedFiles.forEach(async (managedFile) => {
       try {
-        const driveId = await googleDrive.uploadFile(targetEmpreendimento.driveFolderId!, managedFile.file);
+        const driveId = await driveService.uploadFile(targetEmpreendimento.driveFolderId!, managedFile.file);
+
         updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
           arquivos.map(f => f === managedFile ? { ...f, status: 'completed', driveId } : f)
         );
@@ -131,17 +121,16 @@ function App() {
     );
 
     try {
-      if (!isDemoMode && fileToDelete.driveId) {
-        await googleDrive.deleteFile(fileToDelete.driveId);
+      if (fileToDelete.driveId) {
+        await driveService.deleteFile(fileToDelete.driveId);
       }
       updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, i) => i !== fileIndex));
     } catch (error: any) {
       console.error("Erro ao deletar arquivo:", error);
       if (error.message && error.message.toLowerCase().includes('file not found')) {
-        console.log("Arquivo não encontrado no Drive, removendo apenas da interface.");
         updateEmpreendimentoArquivos(empreendimentoId, arquivos => arquivos.filter((_, i) => i !== fileIndex));
       } else {
-        alert("Falha ao deletar o arquivo.");
+        alert(`Falha ao deletar o arquivo: ${error}`);
         updateEmpreendimentoArquivos(empreendimentoId, arquivos =>
           arquivos.map((f, i) => i === fileIndex ? { ...f, status: 'error', error: 'Falha ao deletar' } : f)
         );
@@ -158,13 +147,12 @@ function App() {
     );
 
     try {
-        if (!isDemoMode) {
-            const deletePromises = target.arquivos
-                .filter(f => f.driveId)
-                .map(f => googleDrive.deleteFile(f.driveId!));
-            await Promise.all(deletePromises);
-        }
-        updateEmpreendimentoArquivos(empreendimentoId, () => []);
+      const deletePromises = target.arquivos
+          .filter(f => f.driveId)
+          .map(f => driveService.deleteFile(f.driveId!));
+      await Promise.all(deletePromises);
+        
+      updateEmpreendimentoArquivos(empreendimentoId, () => []);
     } catch (error) {
         console.error("Erro ao limpar arquivos:", error);
         alert("Falha ao remover todos os arquivos. Tente novamente.");
@@ -176,16 +164,8 @@ function App() {
     setEmpreendimentos(prev => prev.map(emp => (emp.id === id ? { ...emp, ...data } : emp)));
   };
   
-  if (!isGapiReady) {
-    return (
-      <div className="min-h-screen flex flex-col items-center justify-center bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100">
-        <div className="text-center">
-          <Spinner className="w-12 h-12 text-brand-start mx-auto mb-4" />
-          <h2 className="text-xl font-semibold text-slate-800 mb-2">Inicializando Genio</h2>
-          <p className="text-slate-600">Carregando configurações...</p>
-        </div>
-      </div>
-    );
+  if (!isInitialized) {
+    return <div className="min-h-screen flex items-center justify-center bg-slate-50"><Spinner className="w-10 h-10 text-brand-start" /></div>;
   }
 
   if (!isSignedIn) {
@@ -200,12 +180,12 @@ function App() {
                 <span className="text-yellow-800 font-medium">Modo de Demonstração</span>
               </div>
               <p className="text-sm text-slate-600 mb-4 max-w-sm">Para usar o Google Drive, configure suas credenciais no arquivo <code className="bg-slate-100 px-1 rounded">.env.development</code></p>
-              <button onClick={() => setIsSignedIn(true)} className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform">
+              <button onClick={handleSignIn} className="flex items-center gap-3 px-6 py-3 bg-gradient-to-r from-brand-start to-brand-end text-white font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform">
                 <LogIn size={20} /> Entrar em Modo Demo
               </button>
             </div>
           ) : (
-            <button onClick={googleDrive.signIn} className="flex items-center gap-3 px-6 py-3 bg-white text-slate-700 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform">
+            <button onClick={handleSignIn} className="flex items-center gap-3 px-6 py-3 bg-white text-slate-700 font-semibold rounded-lg shadow-lg hover:scale-105 transition-transform">
               <LogIn size={20} /> Login com Google Drive
             </button>
           )}
@@ -216,7 +196,7 @@ function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 bg-gradient-to-br from-indigo-100 via-white to-purple-100">
-      <Header onNewEmpreendimento={() => setIsNewModalOpen(true)} onSignOut={handleSignOut} />
+      <Header onNewEmpreendimento={() => setIsNewModalOpen(true)} onSignOut={driveService.signOut} />
 
       {isDemoMode && isSignedIn && (
         <div className="bg-yellow-50 border-b border-yellow-200 px-4 py-2"><div className="max-w-7xl mx-auto flex items-center justify-center gap-2 text-yellow-800 text-sm"><AlertCircle className="w-4 h-4" /><span>Modo de Demonstração - Dados são simulados</span></div></div>
