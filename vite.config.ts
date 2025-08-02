@@ -6,15 +6,22 @@ export default defineConfig({
   plugins: [
     react()
   ],
-  base: '/',
+  base: '/genio/',
   build: {
     outDir: 'dist',
-    assetsDir: 'assets'
+    assetsDir: 'assets',
+    sourcemap: false,
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          vendor: ['react', 'react-dom'],
+          ui: ['lucide-react']
+        }
+      }
+    }
   },
-  // Adiciona a configuração do servidor de desenvolvimento
   server: {
-    headers: {
-      'Cross-Origin-Opener-Policy': 'same-origin-allow-popups',
-    },
-  },
+    port: 5178,
+    host: true
+  }
 });

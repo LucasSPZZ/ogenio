@@ -1,8 +1,11 @@
 {
-  "name": "agente-bom-simplificado",
+  "name": "agentebom-genio",
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "description": "Gerenciador de Empreendimentos com integração Google Drive - AgenteBom",
+  "author": "AgenteBom",
+  "homepage": "https://agentebom.com/genio",
   "scripts": {
     "dev": "vite",
     "build": "vite build",

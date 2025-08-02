@@ -12,9 +12,12 @@ export function Header({ onNewEmpreendimento, onSignOut }: HeaderProps) {
         <div className="flex items-center justify-between h-20">
           <div className="flex items-center gap-3">
             <Sparkles className="h-8 w-8 text-brand-start" />
-            <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
-              Genio
-            </h1>
+            <div>
+              <h1 className="text-2xl font-bold text-slate-800 tracking-tight">
+                AgenteBom Genio
+              </h1>
+              <p className="text-xs text-slate-500">Gerenciador de Empreendimentos</p>
+            </div>
           </div>
           <div className="flex items-center gap-4">
             <button
