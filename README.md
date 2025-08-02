@@ -1,96 +1,61 @@
 # AgenteBom Genio
 
-Gerenciador de Empreendimentos com integração Google Drive - Desenvolvido pela AgenteBom.
+Gerenciador de Empreendimentos com integração direta ao Google Drive, desenvolvido pela AgenteBom.
 
 ## 🚀 Sobre o Projeto
 
-O **AgenteBom Genio** é uma aplicação web moderna para gerenciamento de empreendimentos com integração completa ao Google Drive. Permite criar pastas organizadas, fazer upload de arquivos e gerenciar documentos de forma eficiente.
+O **AgenteBom Genio** é uma aplicação web moderna, client-side, para gerenciamento de empreendimentos. Ela se conecta diretamente à conta Google Drive do usuário para criar pastas organizadas, fazer upload de arquivos e gerenciar documentos de forma eficiente e segura.
 
 ## ✨ Funcionalidades
 
-- 🔐 **Autenticação Google Drive** - Login seguro com OAuth 2.0
-- 📁 **Criação de Pastas** - Organize seus empreendimentos no Drive
-- 📤 **Upload de Arquivos** - Drag & drop para upload múltiplo
-- 🗂️ **Gerenciamento Completo** - Crie, edite e exclua empreendimentos
-- 🎨 **Interface Moderna** - Design responsivo com Tailwind CSS
-- 📱 **PWA Ready** - Funciona offline e pode ser instalado
+-   🔐 **Autenticação Segura com Google:** Login direto via OAuth 2.0, garantindo que a aplicação só acesse o que o usuário permitir.
+-   📁 **Criação de Pastas:** Organize seus empreendimentos em pastas dedicadas dentro do seu próprio Google Drive.
+-   📤 **Upload de Arquivos:** Suporte a arrastar e soltar (drag & drop) e upload múltiplo de arquivos.
+-   🗂️ **Gerenciamento Completo:** Crie, edite, exclua arquivos e empreendimentos com facilidade.
+-   🎨 **Interface Moderna:** Design responsivo e intuitivo construído com Tailwind CSS.
+-   📱 **PWA Ready:** Funciona offline e pode ser instalado em dispositivos móveis e desktops.
+-   🎭 **Modo de Demonstração:** Permite testar a interface sem precisar conectar uma conta Google, ideal para avaliação rápida.
 
 ## 🛠️ Tecnologias
 
-- **React 18** - Framework principal
-- **TypeScript** - Tipagem estática
-- **Tailwind CSS** - Estilização
-- **Vite** - Build tool
-- **Google Drive API** - Integração com nuvem
-- **Lucide React** - Ícones
+-   **Frontend:** React 18, TypeScript, Vite, Tailwind CSS
+-   **API:** Google Drive API v3
+-   **Ícones:** Lucide React
 
 ## 📦 Instalação
 
-```bash
-# Clone o repositório
-git clone [url-do-repositorio]
+1.  **Clone o repositório:**
+    ```bash
+    git clone [url-do-repositorio]
+    cd agentebom-genio
+    ```
+2.  **Instale as dependências:**
+    ```bash
+    npm install
+    ```
+3.  **Configure as Variáveis de Ambiente:**
+    *   Crie uma cópia do `.env.development.example` (se houver) ou crie um novo arquivo `.env.development`.
+    *   Adicione suas credenciais do Google Cloud:
+        ```env
+        VITE_GOOGLE_API_KEY=SUA_CHAVE_DE_API_DO_GOOGLE
+        VITE_GOOGLE_CLIENT_ID=SEU_ID_DE_CLIENTE_OAUTH_DO_GOOGLE
+        ```
+4.  **Execute em modo de desenvolvimento:**
+    ```bash
+    npm run dev
+    ```
+    A aplicação estará disponível em `http://localhost:5178`.
 
-# Entre na pasta
-cd agentebom-genio
+## ⚙️ Configuração do Google Cloud Console
 
-# Instale as dependências
-npm install
+Para que a autenticação funcione, você precisa configurar suas credenciais no Google Cloud:
 
-# Configure as variáveis de ambiente
-cp .env.development.example .env.development
-# Edite o arquivo .env.development com suas credenciais do Google
-
-# Execute em desenvolvimento
-npm run dev
-
-# Build para produção
-npm run build
-```
-
-## ⚙️ Configuração
-
-### Variáveis de Ambiente
-
-Crie um arquivo `.env.development` com:
-
-```env
-VITE_SITE_URL=https://agentebom.com/genio
-VITE_GOOGLE_API_KEY=sua_chave_api_google
-VITE_GOOGLE_CLIENT_ID=seu_id_cliente_oauth
-```
-
-### Google Cloud Console
-
-1. Acesse [Google Cloud Console](https://console.cloud.google.com/)
-2. Crie um novo projeto ou selecione um existente
-3. Ative a Google Drive API
-4. Configure as credenciais OAuth 2.0
-5. Adicione `https://agentebom.com/genio` como origem autorizada
-
-## 🚀 Deploy
-
-O projeto está configurado para ser deployado em `https://agentebom.com/genio/`.
-
-```bash
-# Build para produção
-npm run build
-
-# Os arquivos estarão em /dist
-# Faça upload para o servidor em /genio/
-```
-
-## 📱 PWA
-
-A aplicação é uma PWA (Progressive Web App) que pode ser instalada em dispositivos móveis e desktop.
-
-## 🤝 Suporte
-
-Para suporte técnico ou dúvidas, entre em contato com a **AgenteBom**.
+1.  Acesse o [Google Cloud Console](https://console.cloud.google.com/).
+2.  Crie um novo projeto ou selecione um existente.
+3.  Ative a **Google Drive API**.
+4.  Vá para **Credenciais**, crie uma **Chave de API** e um **ID do cliente OAuth 2.0**.
+5.  Ao configurar o ID do cliente OAuth, em **"Origens JavaScript autorizadas"** e **"URIs de redirecionamento autorizados"**, adicione a URL onde sua aplicação irá rodar (ex: `http://localhost:5178` para desenvolvimento e `https://agentebom.com` para produção).
 
 ## 📄 Licença
 
-Desenvolvido pela AgenteBom - Todos os direitos reservados.
-
----
-
-**AgenteBom Genio** - Transformando a gestão de empreendimentos 🏢✨ 
+Desenvolvido pela AgenteBom - Todos os direitos reservados. 
